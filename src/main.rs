@@ -50,7 +50,7 @@ fn main() {
 }
 
 struct MyApp {
-    picked_path: Option<String>,
+    picked_paths: Vec<String>,
     filenames: HashMap<OsString, OsString>,
     duplicate_files: Vec<(String, bool)>,
 }
@@ -59,8 +59,7 @@ impl MyApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_custom_fonts(&cc.egui_ctx);
         Self {
-            // picked_path: "D:/冯钢/学习资料/Python".to_owned(),
-            picked_path: None,
+            picked_paths: vec![],
             filenames: HashMap::new(),
             duplicate_files: vec![],
         }
@@ -71,8 +70,8 @@ impl MyApp {
         self.duplicate_files.clear();
         self.filenames.clear();
 
-        if let Some(picked_path) = &self.picked_path {
-            let path_str = &picked_path.clone();
+        let picked_paths = self.picked_paths.clone();
+        for path_str in picked_paths {
             let path = Path::new(&path_str);
             self.visit_dirs(&path, MyApp::insert_filename).unwrap();
         }
@@ -118,19 +117,17 @@ impl eframe::App for MyApp {
             ui.heading("My egui Application in 中文");
 
             if ui.button("Select directories…").clicked() {
-                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                    self.picked_path = Some(path.display().to_string());
+                if let Some(paths) = rfd::FileDialog::new().pick_folders() {
+                    self.picked_paths = paths.iter().map(|x| x.display().to_string()).collect();
                 }
             }
 
-            if let Some(picked_path) = &self.picked_path {
-                ui.horizontal(|ui| {
-                    ui.label("Picked file:");
-                    ui.monospace(picked_path);
-                });
+            ui.label("Picked file:");
+            for path in &self.picked_paths {
+                ui.monospace(path);
             }
             // ui.label("Directories for searching:");
-            // ui.text_edit_singleline(&mut self.picked_path);
+            // ui.text_edit_singleline(&mut self.picked_paths);
             if ui.button("Do search").clicked() {
                 self.search_duplicate_files();
             }
