@@ -3,10 +3,8 @@
 use eframe::egui;
 
 use std::io;
-// use std::rc::Rc;
 use std::fs::{self, DirEntry};
 use std::path::Path;
-use std::ffi::OsString;
 use std::collections::HashMap;
 
 fn setup_custom_fonts(ctx: &egui::Context) {
@@ -51,7 +49,7 @@ fn main() {
 
 struct MyApp {
     picked_paths: Vec<String>,
-    filenames: HashMap<OsString, OsString>,
+    hashed_files: HashMap<String, String>,
     duplicate_files: Vec<(String, bool)>,
 }
 
@@ -60,7 +58,7 @@ impl MyApp {
         setup_custom_fonts(&cc.egui_ctx);
         Self {
             picked_paths: vec![],
-            filenames: HashMap::new(),
+            hashed_files: HashMap::new(),
             duplicate_files: vec![],
         }
     }
@@ -68,12 +66,12 @@ impl MyApp {
     fn search_duplicate_files(&mut self) {
         // clean data first
         self.duplicate_files.clear();
-        self.filenames.clear();
+        self.hashed_files.clear();
 
         let picked_paths = self.picked_paths.clone();
         for path_str in picked_paths {
             let path = Path::new(&path_str);
-            self.visit_dirs(&path, MyApp::insert_filename).unwrap();
+            self.visit_dirs(&path, MyApp::handle_onefile).unwrap();
         }
     }
 
@@ -93,20 +91,22 @@ impl MyApp {
         Ok(())
     }
 
-    fn insert_filename(&mut self, entry: &DirEntry) {
-        let entries_of_onefile = self.filenames.get(&entry.file_name());
-        if let Some(entries_of_onefile) = entries_of_onefile {
-            let old_length = fs::metadata(entries_of_onefile).unwrap().len();
+    fn handle_onefile(&mut self, entry: &DirEntry) {
+        let filename = entry.file_name().into_string().unwrap();
+        let abs_path = self.hashed_files.get(&filename);
+        if let Some(abs_path) = abs_path {
+            let old_length = fs::metadata(abs_path).unwrap().len();
             let new_length = entry.metadata().unwrap().len();
             if old_length == new_length {
-                // println!("{:?}\t{}", entries_of_onefile, old_length);
+                // println!("{:?}\t{}", abs_path, old_length);
                 // println!("{:?}\t{}", entry.path(), new_length);
                 self.duplicate_files.append(&mut vec![
-                    (String::from(entries_of_onefile.to_str().unwrap()),false),
-                    (String::from(entry.path().to_str().unwrap()), false)]);
+                    (abs_path.to_string(),false),
+                    (entry.path().to_str().unwrap().to_string(), false)]);
             }
         } else {
-            self.filenames.insert(entry.file_name(), entry.path().into_os_string());
+            self.hashed_files.insert(entry.file_name().into_string().unwrap(),
+                                entry.path().to_str().unwrap().to_string());
         }
     }
 }
