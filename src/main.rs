@@ -47,10 +47,16 @@ fn main() {
     );
 }
 
+#[derive(Hash, Eq, PartialEq, Debug)]
+struct UniqueFileInfo {
+    file_name: String,
+    file_len: u64,
+}
+
 struct MyApp {
     picked_paths: Vec<String>,
-    hashed_files: HashMap<String, String>,
-    duplicate_files: Vec<(String, bool)>,
+    hashed_files: HashMap<UniqueFileInfo, String>,
+    duplicate_files: HashMap<UniqueFileInfo, Vec<(String, bool)>>, // bool value for whether selected for remove
 }
 
 impl MyApp {
@@ -59,7 +65,7 @@ impl MyApp {
         Self {
             picked_paths: vec![],
             hashed_files: HashMap::new(),
-            duplicate_files: vec![],
+            duplicate_files: HashMap::new(),
         }
     }
 
@@ -92,21 +98,27 @@ impl MyApp {
     }
 
     fn handle_onefile(&mut self, entry: &DirEntry) {
-        let filename = entry.file_name().into_string().unwrap();
-        let abs_path = self.hashed_files.get(&filename);
-        if let Some(abs_path) = abs_path {
-            let old_length = fs::metadata(abs_path).unwrap().len();
-            let new_length = entry.metadata().unwrap().len();
-            if old_length == new_length {
+        let file_name = entry.file_name().into_string().unwrap();
+        let file_len = entry.metadata().unwrap().len();
+        let file_info = UniqueFileInfo { file_name, file_len };
+        if let Some(exists_path) = self.hashed_files.get(&file_info) {
+        // if let Some(abs_path) = abs_path {
+        //     let old_length = fs::metadata(abs_path).unwrap().len();
+        //     let new_length = entry.metadata().unwrap().len();
+        //     if old_length == new_length {
                 // println!("{:?}\t{}", abs_path, old_length);
                 // println!("{:?}\t{}", entry.path(), new_length);
-                self.duplicate_files.append(&mut vec![
-                    (abs_path.to_string(),false),
-                    (entry.path().to_str().unwrap().to_string(), false)]);
+            if let Some(files) = self.duplicate_files.get_mut(&file_info) {
+                files.push((entry.path().to_str().unwrap().to_string(), false));
+            } else {
+                // new duplicate
+                self.duplicate_files.insert(file_info, vec![(exists_path.to_string(), false),
+                    (entry.path().to_str().unwrap().to_string(), false)]
+                );
             }
+            // }
         } else {
-            self.hashed_files.insert(entry.file_name().into_string().unwrap(),
-                                entry.path().to_str().unwrap().to_string());
+            self.hashed_files.insert(file_info, entry.path().to_str().unwrap().to_string());
         }
     }
 }
@@ -134,8 +146,10 @@ impl eframe::App for MyApp {
 
             ui.heading("Duplicated files found, and you can choose to remove:");
             egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                for (file, selected) in &mut self.duplicate_files {
-                    ui.toggle_value(selected, &*file);
+                for (_, files) in &mut self.duplicate_files {
+                    for (file, selected) in files {
+                        ui.toggle_value(selected, &*file);
+                    }
                 }
             });
 
@@ -151,8 +165,10 @@ impl eframe::App for MyApp {
                 //     ui.label(file);
                 // }
             // });
-            for (file, _) in self.duplicate_files.iter().filter(|x| x.1) {
-                ui.label(file);
+            for (_, files) in self.duplicate_files.iter() {
+                for (file, _) in files.iter().filter(|x| x.1) {
+                    ui.label(file);
+                }
             }
         });
     }
