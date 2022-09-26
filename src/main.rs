@@ -169,6 +169,10 @@ impl eframe::App for MyApp {
                 if ui.button("Remove").clicked() {
                     if let Err(_) = self.remove_selected_files() {
                         // delete files error
+                        rfd::MessageDialog::new()
+                            .set_description("Delete file error!")
+                            .set_buttons(rfd::MessageButtons::Ok)
+                            .show();
                     }
                 }
             });
