@@ -47,6 +47,7 @@ fn main() {
     );
 }
 
+// duplicate cateria is: filename + filesize
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct UniqueFileInfo {
     file_name: String,
@@ -102,13 +103,9 @@ impl MyApp {
         let file_len = entry.metadata().unwrap().len();
         let file_info = UniqueFileInfo { file_name, file_len };
         if let Some(exists_path) = self.hashed_files.get(&file_info) {
-        // if let Some(abs_path) = abs_path {
-        //     let old_length = fs::metadata(abs_path).unwrap().len();
-        //     let new_length = entry.metadata().unwrap().len();
-        //     if old_length == new_length {
-                // println!("{:?}\t{}", abs_path, old_length);
-                // println!("{:?}\t{}", entry.path(), new_length);
+            // duplicated!
             if let Some(files) = self.duplicate_files.get_mut(&file_info) {
+                // already duplicated more than 2 times
                 files.push((entry.path().to_str().unwrap().to_string(), false));
             } else {
                 // new duplicate
@@ -116,10 +113,23 @@ impl MyApp {
                     (entry.path().to_str().unwrap().to_string(), false)]
                 );
             }
-            // }
         } else {
+            // record file in hash
             self.hashed_files.insert(file_info, entry.path().to_str().unwrap().to_string());
         }
+    }
+
+    fn remove_selected_files(&mut self) -> io::Result<()> {
+        for (_, files) in &mut self.duplicate_files {
+            for (file, _) in files.iter().filter(|x| x.1) {
+                fs::remove_file(file)?;
+            }
+            // removed files should also removed from duplicate list
+            files.retain(|x| x.1==false);
+        }
+        // if duplicate file list remains less than 2, it shoul be not duplicate anymore
+        self.duplicate_files.retain(|_,v| v.len()>1);
+        Ok(())
     }
 }
 
@@ -138,8 +148,7 @@ impl eframe::App for MyApp {
             for path in &self.picked_paths {
                 ui.monospace(path);
             }
-            // ui.label("Directories for searching:");
-            // ui.text_edit_singleline(&mut self.picked_paths);
+
             if ui.button("Do search").clicked() {
                 self.search_duplicate_files();
             }
@@ -158,13 +167,12 @@ impl eframe::App for MyApp {
             ui.horizontal(|ui| {
                 ui.heading("Files selected for removing:");
                 if ui.button("Remove").clicked() {
+                    if let Err(_) = self.remove_selected_files() {
+                        // delete files error
+                    }
                 }
             });
-            // egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                // for (file, _) in self.duplicate_files.iter().filter(|x| x.1) {
-                //     ui.label(file);
-                // }
-            // });
+
             for (_, files) in self.duplicate_files.iter() {
                 for (file, _) in files.iter().filter(|x| x.1) {
                     ui.label(file);
