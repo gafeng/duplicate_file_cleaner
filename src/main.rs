@@ -48,25 +48,29 @@ fn main() {
 }
 
 // duplicate cateria is: filename + filesize
-#[derive(Hash, Eq, PartialEq, Debug)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
 struct UniqueFileInfo {
     file_name: String,
     file_len: u64,
 }
 
 struct MyApp {
+    size_criteria: u64,
     picked_paths: Vec<String>,
     hashed_files: HashMap<UniqueFileInfo, String>,
     duplicate_files: HashMap<UniqueFileInfo, Vec<(String, bool)>>, // bool value for whether selected for remove
+    file_selected: Option<UniqueFileInfo>,
 }
 
 impl MyApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_custom_fonts(&cc.egui_ctx);
         Self {
+            size_criteria: 10*1024*1024,
             picked_paths: vec![],
             hashed_files: HashMap::new(),
             duplicate_files: HashMap::new(),
+            file_selected: None,
         }
     }
 
@@ -101,6 +105,7 @@ impl MyApp {
     fn handle_onefile(&mut self, entry: &DirEntry) {
         let file_name = entry.file_name().into_string().unwrap();
         let file_len = entry.metadata().unwrap().len();
+        if file_len < self.size_criteria { return }
         let file_info = UniqueFileInfo { file_name, file_len };
         if let Some(exists_path) = self.hashed_files.get(&file_info) {
             // duplicated!
@@ -153,13 +158,37 @@ impl eframe::App for MyApp {
                 self.search_duplicate_files();
             }
 
-            ui.heading("Duplicated files found, and you can choose to remove:");
-            egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                for (_, files) in &mut self.duplicate_files {
-                    for (file, selected) in files {
-                        ui.toggle_value(selected, &*file);
-                    }
-                }
+            ui.horizontal(|ui| {
+            // {
+                ui.vertical(|ui| {
+                    ui.heading("Duplicated files:");
+                    egui::ScrollArea::vertical().id_source("filename")
+                        .min_scrolled_height(500.0).max_height(500.0).show(ui, |ui| {
+                        let mut file_ref = None;
+                        for file_info in self.duplicate_files.keys() {
+                            ui.selectable_value(&mut file_ref, Some(file_info),
+                                format!("{}\t{}",file_info.file_name, file_info.file_len));
+                        }
+                        if let Some(file_info) = file_ref {
+                            self.file_selected = Some(file_info.clone());
+                        }
+                    });
+                });
+                ui.vertical(|ui| {
+                    ui.heading("Absolute file path listed, and you can choose to remove:");
+                    egui::ScrollArea::vertical().id_source("abs_path")
+                        .min_scrolled_height(500.0).max_height(500.0).show(ui, |ui| {
+                        if let Some(file_info) = &self.file_selected {
+                            if let Some(files) = self.duplicate_files.get_mut(file_info) {
+                            // for (_, files) in &mut self.duplicate_files {
+                                for (file, selected) in files {
+                                    ui.toggle_value(selected, &*file);
+                                }
+                            }
+                        }
+                    });
+                });
+            // }
             });
 
             ui.add_space(4.0);
