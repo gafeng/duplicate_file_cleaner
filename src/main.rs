@@ -54,8 +54,28 @@ struct UniqueFileInfo {
     file_len: u64,
 }
 
+struct FileSizeCriteria<'a> (&'a str, u64);
+
+const K: u64 = 1024;
+const M: u64 = K*K;
+
+const FILESIZE_100M: FileSizeCriteria = FileSizeCriteria("100M", 100*M);
+const FILESIZE_10M: FileSizeCriteria = FileSizeCriteria("10M", 10*M);
+const FILESIZE_1M: FileSizeCriteria = FileSizeCriteria("1M", 1*M);
+const FILESIZE_100K: FileSizeCriteria = FileSizeCriteria("100K", 100*K);
+const FILESIZE_10K: FileSizeCriteria = FileSizeCriteria("10K", 10*K);
+const FILESIZE_1K: FileSizeCriteria = FileSizeCriteria("1K", 1*K);
+const FILESIZE_0: FileSizeCriteria = FileSizeCriteria("0", 0);
+const FILESIZES: [FileSizeCriteria; 7] = [ FILESIZE_100M,
+                                            FILESIZE_10M,
+                                            FILESIZE_1M,
+                                            FILESIZE_100K,
+                                            FILESIZE_10K,
+                                            FILESIZE_1K,
+                                            FILESIZE_0 ];
+
 struct MyApp {
-    size_criteria: u64,
+    filesize_criteria: u64,
     picked_paths: Vec<String>,
     hashed_files: HashMap<UniqueFileInfo, String>,
     duplicate_files: HashMap<UniqueFileInfo, Vec<(String, bool)>>, // bool value for whether selected for remove
@@ -66,7 +86,7 @@ impl MyApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         setup_custom_fonts(&cc.egui_ctx);
         Self {
-            size_criteria: 10*1024*1024,
+            filesize_criteria: FILESIZE_100M.1,
             picked_paths: vec![],
             hashed_files: HashMap::new(),
             duplicate_files: HashMap::new(),
@@ -84,6 +104,7 @@ impl MyApp {
             let path = Path::new(&path_str);
             self.visit_dirs(&path, MyApp::handle_onefile).unwrap();
         }
+        self.hashed_files.clear();
     }
 
     // one possible implementation of walking a directory only visiting files
@@ -105,7 +126,7 @@ impl MyApp {
     fn handle_onefile(&mut self, entry: &DirEntry) {
         let file_name = entry.file_name().into_string().unwrap();
         let file_len = entry.metadata().unwrap().len();
-        if file_len < self.size_criteria { return }
+        if file_len < self.filesize_criteria { return }
         let file_info = UniqueFileInfo { file_name, file_len };
         if let Some(exists_path) = self.hashed_files.get(&file_info) {
             // duplicated!
@@ -143,17 +164,27 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("My egui Application in 中文");
 
+            ui.separator();
             if ui.button("Select directories…").clicked() {
                 if let Some(paths) = rfd::FileDialog::new().pick_folders() {
                     self.picked_paths = paths.iter().map(|x| x.display().to_string()).collect();
                 }
             }
 
-            ui.label("Picked file:");
+            ui.label("Picked paths:");
             for path in &self.picked_paths {
                 ui.monospace(path);
             }
 
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Search file size larger than:");
+                for filesize in FILESIZES {
+                    ui.selectable_value(&mut self.filesize_criteria, filesize.1, filesize.0);
+                }
+            });
+
+            ui.separator();
             if ui.button("Do search").clicked() {
                 self.search_duplicate_files();
             }
